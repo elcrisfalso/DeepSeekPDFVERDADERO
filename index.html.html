@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Editor de PDF Online</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    #pdf-container {
+      position: relative;
+      display: inline-block;
+    }
+    #pdf-canvas {
+      border: 1px solid #ccc;
+      display: block;
+    }
+    .text-box {
+      position: absolute;
+      background: rgba(255,255,255,0.8);
+      border: 1px dashed #000;
+      padding: 2px;
+      font-size: 12px;
+      min-width: 40px;
+      min-height: 20px;
+    }
+    #confirm-btn {
+      margin-top: 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Editor de PDF en el Navegador</h2>
+
+<input type="file" id="file-input" accept="application/pdf"><br><br>
+
+<div id="pdf-container">
+  <canvas id="pdf-canvas"></canvas>
+</div>
+
+<br>
+<button id="confirm-btn">Confirmar y Descargar PDF</button>
+
+<script>
+  const input = document.getElementById('file-input');
+  const canvas = document.getElementById('pdf-canvas');
+  const ctx = canvas.getContext('2d');
+  const container = document.getElementById('pdf-container');
+  const confirmBtn = document.getElementById('confirm-btn');
+
+  let pdfDoc = null;
+  let originalPdfBytes = null;
+  let scale = 1.5;
+  let boxes = []; // Almacena los textos añadidos/editados
+
+  input.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    const arrayBuffer = await file.arrayBuffer();
+    originalPdfBytes = arrayBuffer;
+
+    pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const page = await pdfDoc.getPage(1);
+
+    const viewport = page.getViewport({ scale });
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    const textContent = await page.getTextContent();
+    renderTextLayer(textContent, viewport);
+
+    confirmBtn.style.display = 'inline-block';
+  });
+
+  function renderTextLayer(textContent, viewport) {
+    // Limpia cualquier caja previa
+    document.querySelectorAll('.text-box').forEach(e => e.remove());
+
+    textContent.items.forEach(item => {
+      const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+      const left = tx[4];
+      const top = canvas.height - tx[5];
+      const div = document.createElement('div');
+
+      div.className = 'text-box';
+      div.contentEditable = true;
+      div.style.left = `${left}px`;
+      div.style.top = `${top}px`;
+      div.style.fontSize = `${item.height * scale}px`;
+      div.textContent = item.str;
+
+      container.appendChild(div);
+      boxes.push(div);
+    });
+  }
+
+  // Añadir nuevo texto donde se haga doble clic
+  canvas.addEventListener('dblclick', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const div = document.createElement('div');
+    div.className = 'text-box';
+    div.contentEditable = true;
+    div.style.left = `${x}px`;
+    div.style.top = `${y}px`;
+    div.textContent = 'Nuevo texto';
+
+    container.appendChild(div);
+    boxes.push(div);
+    div.focus();
+  });
+
+  confirmBtn.addEventListener('click', async () => {
+    const pdfDoc = await PDFLib.PDFDocument.load(originalPdfBytes);
+    const page = pdfDoc.getPages()[0];
+    const { width, height } = page.getSize();
+
+    // Limpia la página (si quieres mantener el fondo comentá la línea siguiente)
+    page.drawRectangle({ x: 0, y: 0, width, height, color: PDFLib.rgb(1, 1, 1) });
+
+    boxes.forEach(box => {
+      const x = parseFloat(box.style.left);
+      const y = parseFloat(box.style.top);
+      const text = box.textContent;
+      const fontSize = parseFloat(box.style.fontSize || 12);
+
+      // PDF-lib usa coordenadas desde abajo
+      page.drawText(text, {
+        x: x,
+        y: height - y,
+        size: fontSize,
+        color: PDFLib.rgb(0, 0, 0),
+      });
+    });
+
+    const pdfBytes = await pdfDoc.save();
+
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'pdf-editado.pdf';
+    link.click();
+  });
+</script>
+
+</body>
+</html>

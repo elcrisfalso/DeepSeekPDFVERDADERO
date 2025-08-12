@@ -1,0 +1,24 @@
+body {
+  font-family: Arial, sans-serif;
+  padding: 20px;
+}
+
+#pdf-container {
+  position: relative;
+}
+
+#pdf-canvas {
+  border: 1px solid #ccc;
+  display: block;
+  margin-bottom: 10px;
+}
+
+#editor {
+  position: absolute;
+  display: none;
+  background: #fff;
+  border: 1px solid black;
+  padding: 2px;
+  font: 16px Arial;
+  z-index: 10;
+}
